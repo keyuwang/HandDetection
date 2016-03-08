@@ -1,5 +1,6 @@
 # HandDetection
 The project is developed on Eclipse and uses Java programming language, make sure you have the proper development environment.
+you need to have JDK+Eclipse+Javacv installed on your computer.
 
 Javacv is the image process library used in the project, you can see referece on website https://github.com/bytedeco/javacv
 
