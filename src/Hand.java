@@ -11,27 +11,10 @@ import static org.bytedeco.javacpp.opencv_imgproc.*;
 
 
 public class Hand {
-	
-	private static final int IMG_SCALE = 2;  // scaling applied to webcam image
-	
+		
 	private static final float SMALLEST_AREA =  600.0f; // ignore smaller contour areas
 	
-	private static final int MAX_POINTS = 20;   // max number of points stored in an array
-	
-	// used for simiplifying the defects list
-	private static final int MIN_FINGER_DEPTH = 20;
-	private static final int MAX_FINGER_ANGLE = 100;   // degrees
-	
-	// angle ranges of thumb and index finger of the left hand relative to its COG
-	private static final int MIN_THUMB = 120;
-	private static final int MAX_THUMB = 200;
-	
-	private static final int MIN_INDEX = 60;
-	private static final int MAX_INDEX = 120;
-
-	private static final int KCURVATURE = 8;
-	
-	// HSV ranges defining the glove colour
+	// HSV ranges defining the hand colour
 	private static final int hueLower=0, hueUpper=25;
 	private static final int satLower=26, satUpper=150;
 	private static final int briLower=60, briUpper=240;

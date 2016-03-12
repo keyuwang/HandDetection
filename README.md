@@ -1,5 +1,5 @@
 HandDetection
-------------------
+-----------------------
 
 The project is developed on Eclipse and uses Java programming language, make sure you have the proper development environment.
 
