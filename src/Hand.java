@@ -18,11 +18,11 @@ public class Hand {
 	
 	private static final int MAX_POINTS = 20;   // max number of points stored in an array
 	
-	  // used for simiplifying the defects list
+	// used for simiplifying the defects list
 	private static final int MIN_FINGER_DEPTH = 20;
 	private static final int MAX_FINGER_ANGLE = 100;   // degrees
 	
-	  // angle ranges of thumb and index finger of the left hand relative to its COG
+	// angle ranges of thumb and index finger of the left hand relative to its COG
 	private static final int MIN_THUMB = 120;
 	private static final int MAX_THUMB = 200;
 	
@@ -165,7 +165,6 @@ public class Hand {
 			circle(resultImg,fingerTips.get(i),8,new Scalar(0,0,255,0),-1,8,0);			
 			line(resultImg,fingerTips.get(i),cogPt,new Scalar(0,255,255,0),2,8,0);
 		}
-		
 		return;
 	}
 	
