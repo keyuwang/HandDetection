@@ -1,14 +1,11 @@
 import java.util.*;
 
-import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
 import org.bytedeco.javacpp.opencv_core.MatVector;
-import org.bytedeco.javacpp.opencv_video.KalmanFilter;
 import org.bytedeco.javacpp.indexer.*;
 
 import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
-
 
 public class Hand {
 		
@@ -41,8 +38,11 @@ public class Hand {
 	private Mat[] list;
 	
 	/******************Kalman Filter*********************************/
-	private KalmanFilter KF;
+	private KFilter KF;
 	
+	/*************Static Gesture Recognition******************************/
+	private StaticGesture staticGesture;
+	private String[] staticGestureName={"None","Pointing","Pinch","Other Gesture"};
 	
 	public Hand(int width, int height)
 	{
@@ -57,37 +57,14 @@ public class Hand {
 		list= new Mat[2];
 		
 		cogPt = new Point();
-	    fingerTips = new ArrayList<Point>();		
+	    fingerTips = new ArrayList<Point>();
+	    
+	    KF=new KFilter();
 		
-/******************initialize Kalman Filter*********************************/
-		KF = new KalmanFilter(4,2,0,CV_32F);
-		
-		
-		float[] f ={1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1};
-
-		FloatPointer p= new FloatPointer(f);
-		Mat F=new Mat(4,4,CV_32F,p);
-		Mat Fcopy=F.clone();//copy transition matrix to prevent memory recycling float[]f
-		KF.transitionMatrix(Fcopy);
-		
-		Mat H=new Mat(2, 4,CV_32F);
-		setIdentity(H);
-		KF.measurementMatrix(H);
-		
-		Mat Q=new Mat(4, 4,CV_32F);
-		setIdentity(Q,Scalar.all(1e-4));
-		KF.processNoiseCov(Q);
-		
-		Mat R=new Mat(2, 2,CV_32F);
-		setIdentity(R,Scalar.all(1e-2));
-		KF.measurementNoiseCov(R);
-		
-		Mat P=new Mat(4, 4,CV_32F);
-		setIdentity(P,Scalar.all(1));
-		KF.errorCovPost(P);
-/************************************************************************/		
-		
+	    staticGesture=new StaticGesture();
+	    
 		printed=false;
+		
 	}
 	
 	public void update(Mat im)
@@ -110,27 +87,13 @@ public class Hand {
 		
 		findFingerTips(list[0]);
 		
+		KF.update(cogPt);//update Kalman Filter
 		
-/******************update Kalman Filter***********************************************/		
-		Mat measurement=new Mat(2,1,CV_32F);
-		Mat estimated=new Mat(4,1,CV_32F);	
-		Mat prediction=new Mat(4,1,CV_32F);
+		staticGesture.update(cogPt,fingerTips);
 		
-		FloatBufferIndexer pIdx=measurement.createIndexer();		
-		pIdx.put(0, cogPt.x());
-		pIdx.put(1, cogPt.y());
+/****************display the result*******************************************/		
+		circle(resultImg,KF.getPrediction(),6,new Scalar(255,0,0,0),-1,8,0);
 		
-		estimated=KF.correct(measurement);		
-//		pIdx=estimated.createIndexer();		
-//		Point statePt=new Point((int)pIdx.get(0),(int)pIdx.get(1));	
-//		circle(resultImg,statePt,6,new Scalar(255,0,0,0),-1,8,0);		
-
-		prediction=KF.predict();		
-		pIdx = prediction.createIndexer();		
-		Point predictPt=new Point((int)pIdx.get(0),(int)pIdx.get(1));		
-		circle(resultImg,predictPt,6,new Scalar(255,0,0,0),-1,8,0);		
-		
-/*****************display the result*******************************************/		
 		MatVector contourList = new MatVector(list);
 	
 		RNG rng=new RNG(123456); //openCV Random Number Generator  set seed 123456	
@@ -148,6 +111,9 @@ public class Hand {
 			circle(resultImg,fingerTips.get(i),8,new Scalar(0,0,255,0),-1,8,0);			
 			line(resultImg,fingerTips.get(i),cogPt,new Scalar(0,255,255,0),2,8,0);
 		}
+		
+		putText(resultImg, staticGestureName[staticGesture.getGesture()], new Point(0, 20),CV_FONT_HERSHEY_COMPLEX,0.7,new Scalar(0,255,0,0));
+		
 		return;
 	}
 	
@@ -284,6 +250,11 @@ public class Hand {
 	public int getFingerNumber()
 	{
 		return fingerTips.size();
+	}
+	
+	public ArrayList<Point> getFingers()
+	{
+		return fingerTips;
 	}
 	
 	public boolean isDetected()

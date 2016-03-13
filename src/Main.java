@@ -18,7 +18,8 @@ public class Main {
 
         int width  = grabbedImage.rows();
         int height = grabbedImage.cols();
-        Mat grayImage  = new Mat(width, height, CV_8UC1); 
+        Mat grayImage  = new Mat(width, height, CV_8UC1);
+        Mat outImage; 
        
         Hand hand=new Hand(width, height);
 
@@ -28,7 +29,8 @@ public class Main {
         while (frame.isVisible() && (grabbedImage = converter.convert(grabber.grab())) != null) {
         	
         	hand.update(grabbedImage);
-            Frame outFrame = converter.convert(hand.getResult());
+        	outImage=hand.getResult();
+            Frame outFrame = converter.convert(outImage);
             frame.showImage(outFrame);       
         }        
         //  for(;;);
