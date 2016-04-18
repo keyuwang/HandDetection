@@ -9,14 +9,13 @@ public class KFilter {
 	
 	private KalmanFilter KF;
 	private float[] f ={1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1};
-	private FloatPointer p;
 	private Mat F,H,Q,R,P;//kalman parameter matrix
 	private Mat measurement,estimated,prediction;
 	
 	public KFilter()
 	{
 		KF = new KalmanFilter(4,2,0,CV_32F);
-		p= new FloatPointer(f);
+		FloatPointer p= new FloatPointer(f);
 		F=new Mat(4,4,CV_32F,p);
 		KF.transitionMatrix(F);
 		
