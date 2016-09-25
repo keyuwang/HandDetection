@@ -1,28 +1,34 @@
+import java.io.File;
 import java.util.*;
 
 import org.bytedeco.javacpp.*;
+import org.bytedeco.javacpp.opencv_core.Mat;
 import org.bytedeco.javacpp.opencv_core.MatVector;
+import org.bytedeco.javacpp.opencv_core.Point;
 import org.bytedeco.javacpp.opencv_core.Scalar;
+import org.bytedeco.javacpp.opencv_objdetect.CascadeClassifier;
 import org.bytedeco.javacpp.indexer.*;
 
 import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
+import static org.bytedeco.javacpp.opencv_objdetect.*;
 
 public class Hand {
 		
-	private static final float SMALLEST_AREA =  600.0f; // ignore smaller contour areas
+	private static final float SMALLEST_AREA =  1200.0f; // ignore smaller contour areas
 	
 	// HSV ranges defining the hand colour
-	private static final int hueLower=0, hueUpper=35, hueShifter=0;
-	private static final int hueLower2=150, hueUpper2=255;
-	private static final int satLower=10, satUpper=250,satShifter=0;
-	private static final int briLower=10, briUpper=240,briShifter=0;
+	private static final int hueLower=18, hueUpper=28, hueShifter=0;
+	private static final int hueLower2=180, hueUpper2=255;
+	private static final int satLower=40, satUpper=150,satShifter=0;
+	private static final int briLower=120, briUpper=255,briShifter=0;
 	
 	private static final int kernelDist=80;
 	
 	private static Mat hsvLower,hsvLower2;
 	private static Mat hsvUpper,hsvUpper2;
 	
+	private int h,w;
 	  // defects data for the hand contour
 	private ArrayList<Point> fingerTips;	
 
@@ -45,9 +51,21 @@ public class Hand {
 	/******************Kalman Filter*********************************/
 	private KFilter KF;
 	
+	/******************Hand Detector*********************************/
+	private CascadeClassifier palmCascade;
+	private Mat grayImg,hist,mask,backproj;
+	private int[] channels={0};
+	private int[] histSize={32};
+	private float[] ranges={0f,255.0f};
+	private RectVector palms;
+	
+	
+	
+	
 	/*************Static Gesture Recognition******************************/
 	private StaticGesture staticGesture;
-	private String[] staticGestureName={"None","Ready State","Pressed State","Bloom"};
+	private String[] staticGestureName={"None","Ready State","Pressed State","Zoom","Bloom"};
+	private int prevGesture=0;
 	
 	/*************Dynamic Gesture Recognition******************************/
 	private DynamicGesture dynamicGesture;
@@ -56,32 +74,50 @@ public class Hand {
 	
 	public Hand(int height,int width)
 	{
+		h=height;
+		w=width;
 		resultImg = new Mat(height,width,CV_8UC4);
 		imgThreshed = new Mat(height,width,CV_8UC1);
 		imgThreshed2 = new Mat(height,width,CV_8UC1);
 		
+		backproj= new Mat(height,width,CV_8UC1);
+
 		kernel=new Mat(8, 8, CV_8U, new Scalar(1d));//opencv erode and dilate kernel
 		kernel2=new Mat(kernelDist, kernelDist, CV_8U, new Scalar(1d));
 		
 		hsvImg = new Mat(height,width,CV_8UC3);
-		hsvLower = new Mat(height,width,CV_8UC3,new Scalar(hueLower, satLower, briLower,0));
-		hsvUpper = new Mat(height,width,CV_8UC3,new Scalar(hueUpper, satUpper, briUpper,0));
-		hsvLower2 = new Mat(height,width,CV_8UC3,new Scalar(hueLower2, satLower, briLower,0));
-		hsvUpper2 = new Mat(height,width,CV_8UC3,new Scalar(hueUpper2, satUpper, briUpper,0));
+		grayImg = new Mat(height,width,CV_8UC1);
+
+		//setHSV(20,10,80,50,180,75);
+		setHSV(10,25,105,55,180,75);
 		
 		contours = new MatVector();
-		list= new Mat[2];
-		
+		list= new Mat[2];		
 		cogPt = new Point();
 	    fingerTips = new ArrayList<Point>();
 	    
-	    KF=new KFilter();
-		
+//	    KF=new KFilter();
+	    File f = new File("src/palmCascadeClassifier.xml");
+	    if (f == null)
+	    {
+	    	System.out.println("Can't open file!");
+	    }
+	    	    
+	    palmCascade=new CascadeClassifier(f.getAbsolutePath());
+	    palms=new RectVector();
+	    hist=new Mat();
+	    mask=new Mat();
+	    
+	    if (!palmCascade.load(f.getAbsolutePath()))
+	    {
+	    	System.out.println("Can't load file!");
+	    }
+
 	    staticGesture=new StaticGesture();
 	    dynamicGesture=new DynamicGesture();
 	    
 		printed=false;
-		
+
 	}
 	
 	public void update(Mat im)
@@ -89,7 +125,7 @@ public class Hand {
 		if(im.channels()==3)
 		{
 			cvtColor(im, hsvImg, CV_BGR2HSV);
-//			add(hsvImg,new Scalar(hueShifter, satShifter, briShifter,0));
+			cvtColor(im, grayImg, CV_BGR2GRAY);
 			inRange(hsvImg, hsvLower, hsvUpper, imgThreshed);
 			inRange(hsvImg, hsvLower2, hsvUpper2, imgThreshed2);
 			add(imgThreshed,imgThreshed2,imgThreshed);
@@ -100,11 +136,27 @@ public class Hand {
 		{
 			//process depth image
 		}
+		
+		
+		palmCascade.detectMultiScale(grayImg, palms, 1.1, 2, CV_HAAR_SCALE_IMAGE, new Size(100,100), new Size(500,500));
+		
+		Rect palm;
+		for(int idx=0;idx<palms.size();idx++)
+		{
+			palm=palms.get(idx);
+//			System.out.println(idx+" palm detected");
+			rectangle(resultImg,palm,new Scalar(0,255,0,0));
+		}
+		calcHist(hsvImg,1,channels,mask,hist,1,histSize,ranges);
+//		calcBackProject(hsvImg,1,channels,hist,backproj,ranges);
+//		cvtColor(backproj, resultImg, CV_GRAY2RGBA);
+		
+		printMat(hist);
 		erode(imgThreshed,imgThreshed,kernel);
 		dilate(imgThreshed, imgThreshed, kernel);
 		
 		innerCircle(imgThreshed2);		
-//		cvtColor(imgThreshed2, resultImg, CV_GRAY2RGBA);
+		
 		
 		list[0]=findBiggestContour(imgThreshed);
 		if(list[0]==null)
@@ -118,7 +170,7 @@ public class Hand {
 		
 		findFingerTips(list[0]);
 		
-		KF.update(cogPt);//update Kalman Filter
+//		KF.update(cogPt);//update Kalman Filter
 		
 		staticGesture.update(cogPt,fingerTips,innerRadius);
 		dynamicGesture.update(staticGesture.getGesture());
@@ -145,7 +197,6 @@ public class Hand {
 				bigContour=contours.get(idx);
 			}			
 		}
-				
 		
 		return bigContour;
 	}
@@ -268,16 +319,36 @@ public class Hand {
 		return;
 	}
 
-	
+
 	private int dist(Point u,Point v)
 	{
 		return Math.abs(u.x()-v.x())+Math.abs(u.y()-v.y());
 	}
 	
+	
 	public Mat getResult()
 	{
 		return resultImg; 
 	}
+	
+	public void setHSV(int midH,int varH,int midS,int varS,int midV,int varV)
+	{
+		int huelower2=181;
+		int huelower1=midH-varH;
+		if(huelower1<0)
+		{
+			huelower2=180+midH-varH;
+			huelower1=0;
+		}
+
+		hsvLower = new Mat(h,w,CV_8UC3,new Scalar(huelower1, midS-varS, midV-varV,0));
+		hsvUpper = new Mat(h,w,CV_8UC3,new Scalar(midH+varH, midS+varS, midV+varV,0));
+		hsvLower2 = new Mat(h,w,CV_8UC3,new Scalar(huelower2, midS-varS, midV-varV,0));
+		hsvUpper2 = new Mat(h,w,CV_8UC3,new Scalar(255, midS+varS, midV+varV,0));
+		return;
+
+	}
+
 	
 	public int getFingerNumber()
 	{
@@ -289,6 +360,7 @@ public class Hand {
 		return fingerTips;
 	}
 	
+	
 	public boolean isDetected()
 	{
 		return detected;
@@ -297,7 +369,7 @@ public class Hand {
 /******************debug function*********************************/
 	private void display()
 	{
-		circle(resultImg,KF.getPrediction(),6,new Scalar(255,0,0,0),-1,8,0);
+//		circle(resultImg,KF.getPrediction(),6,new Scalar(255,0,0,0),-1,8,0);
 		
 		circle(resultImg,cogPt,6,new Scalar(0,255,0,0),-1,8,0);
 		circle(resultImg,cogPt,innerRadius,new Scalar(0,0,255,0),1,8,0);
@@ -320,10 +392,57 @@ public class Hand {
 			line(resultImg,fingerTips.get(i),cogPt,new Scalar(0,255,255,0),2,8,0);
 		}
 		
+		if(staticGesture.getTipPostion()!=null)
+		{
+			circle(resultImg,staticGesture.getTipPostion(),8,new Scalar(255,0,0,0),-1,8,0);
+		}
+		
 		putText(resultImg, staticGestureName[staticGesture.getGesture()], new Point(0, 20),CV_FONT_HERSHEY_COMPLEX,0.7,new Scalar(0,255,0,0));
 		
 		putText(resultImg, dynamicGestureName[dynamicGesture.getGesture()], new Point(560, 20),CV_FONT_HERSHEY_COMPLEX,0.7,new Scalar(255,0,0,0));
 
+		/****************************coordinate calibrate****************		
+		circle(resultImg,new Point(20,80),4,new Scalar(255,255,0,0),-1,8,0);
+		circle(resultImg,new Point(620,80),4,new Scalar(255,255,0,0),-1,8,0);
+		circle(resultImg,new Point(20,380),4,new Scalar(255,255,0,0),-1,8,0);
+		circle(resultImg,new Point(620,380),4,new Scalar(255,255,0,0),-1,8,0);
+		circle(resultImg,new Point(188,245),4,new Scalar(255,255,0,0),-1,8,0);
+		********************************************************************/	
+	}
+	
+	public String getStr()
+	{
+		int currentGesture=staticGesture.getGesture();
+		int action=0;/* down = 1, move =2, up=3, zoom=4 */
+		int x=0,y=0;
+		if(currentGesture==2/*pressed*/)
+		{
+			if(prevGesture==1)action=1;
+			else action=2;
+		}
+		if(currentGesture==1/*up*/)
+		{
+			if(prevGesture==2)action=3;
+			else action=0;
+		}
+		if(currentGesture==3)/*zoom*/
+		{
+			action=4;
+			x=0;
+			y=staticGesture.getZoomDist();
+		}
+		prevGesture=currentGesture;
+		
+		if(staticGesture.getTipPostion()!=null)
+		{
+			x=staticGesture.getTipPostion().x()*2/3+140;
+			y=320-3*staticGesture.getTipPostion().y()/4;
+		}
+		
+		String result=action+" "+x+" "+y;
+		
+//		System.out.println(result);
+		return result;
 	}
 	
 	public void printMat(Mat a)

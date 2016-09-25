@@ -32,7 +32,7 @@ public class DynamicGesture {
 			if(preStaticState==2)state=HOLD;
 			if(preStaticState==1)down=CYCLE;
 		}
-		if(staticState==3&&preStaticState==NONE)state=BLOOM;
+		if(staticState==4&&preStaticState==NONE)state=BLOOM;
 		
 		if(down>0&&up>down)
 		{
